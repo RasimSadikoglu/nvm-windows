@@ -54,6 +54,7 @@ type Environment struct {
 	originalpath    string
 	originalversion string
 	verifyssl       bool
+	useJunction     bool
 }
 
 var home = filepath.Clean(os.Getenv("NVM_HOME") + "\\settings.txt")
@@ -70,6 +71,7 @@ var env = &Environment{
 	originalpath:    "",
 	originalversion: "",
 	verifyssl:       true,
+	useJunction:     false,
 }
 
 func writeToErrorLog(i interface{}, abort ...bool) {
@@ -1194,10 +1196,14 @@ func use(version string, cpuarch string, reload ...bool) {
 		// Create new symlink
 		var ok bool
 		// ok, err = runElevated(fmt.Sprintf(`"%s" cmd /C mklink /D "%s" "%s"`, filepath.Join(env.root, "elevate.cmd"), filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version)))
-		ok, err = elevatedRun("mklink", "/D", filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
+		symlinkParam := "/D"
+		if env.useJunction {
+			symlinkParam = "/J"
+		}
+		ok, err = elevatedRun("mklink", symlinkParam, filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
 		if err != nil {
 			if strings.Contains(err.Error(), "not have sufficient privilege") || strings.Contains(strings.ToLower(err.Error()), "access is denied") {
-				ok, err = elevatedRun("mklink", "/D", filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
+				ok, err = elevatedRun("mklink", symlinkParam, filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
 				if err != nil {
 					ok = false
 					status <- Status{Err: err, Done: true}
@@ -2037,6 +2043,15 @@ func setup() {
 				env.proxy = res.String()
 			}
 		}
+	}
+
+	if val, ok := m["use_junction"]; ok {
+		boolVal, err := strconv.ParseBool(val)
+		if err != nil {
+			fmt.Println("\nERROR", err)
+			os.Exit(1)
+		}
+		env.useJunction = boolVal
 	}
 
 	web.SetMirrors(env.node_mirror, env.npm_mirror)
