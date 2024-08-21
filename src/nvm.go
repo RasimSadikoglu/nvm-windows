@@ -33,7 +33,7 @@ import (
 )
 
 const (
-	NvmVersion = "1.1.11"
+	NvmVersion = "1.1.13"
 )
 
 type Environment struct {
@@ -47,6 +47,7 @@ type Environment struct {
 	originalpath    string
 	originalversion string
 	verifyssl       bool
+	useJunction     bool
 }
 
 var home = filepath.Clean(os.Getenv("NVM_HOME") + "\\settings.txt")
@@ -63,6 +64,7 @@ var env = &Environment{
 	originalpath:    "",
 	originalversion: "",
 	verifyssl:       true,
+	useJunction:     false,
 }
 
 func main() {
@@ -765,7 +767,11 @@ func use(version string, cpuarch string, reload ...bool) {
 	// Create new symlink
 	var ok bool
 	// ok, err = runElevated(fmt.Sprintf(`"%s" cmd /C mklink /D "%s" "%s"`, filepath.Join(env.root, "elevate.cmd"), filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version)))
-	ok, err = elevatedRun("mklink", "/D", filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
+	symlinkParam := "/D"
+	if env.useJunction {
+		symlinkParam = "/J"
+	}
+	ok, err = elevatedRun("mklink", symlinkParam, filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
 	if err != nil {
 		if strings.Contains(err.Error(), "not have sufficient privilege") || strings.Contains(strings.ToLower(err.Error()), "access is denied") {
 			// cmd := exec.Command(filepath.Join(env.root, "elevate.cmd"), "cmd", "/C", "mklink", "/D", filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
@@ -774,7 +780,11 @@ func use(version string, cpuarch string, reload ...bool) {
 			// cmd.Stdout = &output
 			// cmd.Stderr = &_stderr
 			// perr := cmd.Run()
-			ok, err = elevatedRun("mklink", "/D", filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
+			symlinkParam := "/D"
+			if env.useJunction {
+				symlinkParam = "/J"
+			}
+			ok, err = elevatedRun("mklink", symlinkParam, filepath.Clean(env.symlink), filepath.Join(env.root, "v"+version))
 
 			if err != nil {
 				ok = false
@@ -1316,15 +1326,7 @@ func getLatest() string {
 }
 
 func getLTS() string {
-	all, ltsList, current, stable, unstable, npm := node.GetAvailable()
-	fmt.Println(all)
-	fmt.Println(ltsList)
-	fmt.Println(current)
-	fmt.Println(stable)
-	fmt.Println(unstable)
-	fmt.Println(npm)
-	// _, ltsList, _, _, _, _ := node.GetAvailable()
-	// ltsList has already been numerically sorted
+	_, ltsList, _, _, _, _ := node.GetAvailable()
 	return ltsList[0]
 }
 
@@ -1509,6 +1511,15 @@ func setup() {
 				env.proxy = res.String()
 			}
 		}
+	}
+
+	if val, ok := m["use_junction"]; ok {
+		boolVal, err := strconv.ParseBool(val)
+		if err != nil {
+			fmt.Println("\nERROR", err)
+			os.Exit(1)
+		}
+		env.useJunction = boolVal
 	}
 
 	web.SetMirrors(env.node_mirror, env.npm_mirror)
